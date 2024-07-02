@@ -1,0 +1,83 @@
+package mpp.stackWithElimination
+
+import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.atomicArrayOfNulls
+import java.util.*
+
+class TreiberStackWithElimination<E> {
+    private val top = atomic<Node<E>?>(null)
+    private val eliminationArray = atomicArrayOfNulls<Cell<E>?>(ELIMINATION_ARRAY_SIZE)
+//    private val cellDone = Cell<E>(CellState.DONE, null)
+    private val cellDone = Cell<E>(false, null)
+    private val TRY_COUNT = 5
+    private val ELIMINATION_WIDTH = 4
+    private val random = Random()
+    private enum class CellState {
+        READY, DONE
+    }
+//    private data class Cell<E>(val state: Boolean, val value: E?)
+    private data class Cell<E>(val ready: Boolean, val value: E?)
+
+    /**
+     * Adds the specified element [x] to the stack.
+     */
+    fun push(x: E) {
+        val a = true to x
+//        val curCell = Cell(CellState.READY, x)
+        val curCell = Cell(true, x)
+        var i = random.nextInt(ELIMINATION_ARRAY_SIZE)
+        for (k in 0 until ELIMINATION_WIDTH) {
+            if (eliminationArray[i].compareAndSet(null, curCell)) {
+                for (j in 0 until TRY_COUNT) {
+                    if (eliminationArray[i].compareAndSet(cellDone, null)) {
+                        return
+                    }
+                }
+                when {
+                    eliminationArray[i].compareAndSet(curCell, null) -> break
+                    eliminationArray[i].compareAndSet(cellDone, null) -> return
+                    else -> break
+                }
+            }
+            i = (++i) % ELIMINATION_ARRAY_SIZE
+        }
+
+        while (true) {
+            val curTop = top.value
+            if (top.compareAndSet(curTop, Node(x, curTop))) {
+                return
+            }
+        }
+    }
+
+    /**
+     * Retrieves the first element from the stack
+     * and returns it; returns `null` if the stack
+     * is empty.
+     */
+    fun pop(): E? {
+        var i = random.nextInt(ELIMINATION_ARRAY_SIZE)
+        for (k in 0 until ELIMINATION_WIDTH) {
+            for (j in 0 until TRY_COUNT) {
+                val curCell = eliminationArray[i].value ?: continue
+//                if (curCell.state == CellState.READY &&
+                if (curCell.ready &&
+                    eliminationArray[i].compareAndSet(curCell, cellDone)) {
+                    return curCell.value
+                }
+            }
+            i = (++i) % ELIMINATION_ARRAY_SIZE
+        }
+
+        while (true) {
+            val curTop = top.value ?: return null
+            if (top.compareAndSet(curTop, curTop.next)) {
+                return curTop.x
+            }
+        }
+    }
+}
+
+private class Node<E>(val x: E, val next: Node<E>?)
+
+private const val ELIMINATION_ARRAY_SIZE = 2 // DO NOT CHANGE IT
